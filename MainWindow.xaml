@@ -1,0 +1,552 @@
+<Window
+    x:Class="SScanner.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SScanner"
+    xmlns:models="using:SScanner.Models"
+    xmlns:svc="using:SScanner.Services">
+
+    <Grid x:Name="Root" Background="{ThemeResource CanvasBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="2" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="26" />
+        </Grid.RowDefinitions>
+
+        <!-- Top bar (also the window drag region) -->
+        <Grid x:Name="TopBar" Grid.Row="0" Background="{ThemeResource ChromeBrush}" Padding="16,0,150,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Border Width="22" Height="22" CornerRadius="4" Background="{StaticResource AccentBrush}">
+                    <FontIcon Glyph="&#xE722;" FontSize="12" Foreground="White"
+                              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                </Border>
+                <TextBlock Text="Every Scanner" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Border Width="1" Height="18" Background="{ThemeResource BorderBrush1}" Margin="6,0" />
+                <TextBlock x:Name="DocumentTitle" Text="Untitled batch" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+            </StackPanel>
+            <AutoSuggestBox x:Name="SearchBox" Grid.Column="1" Width="420" MaxWidth="420" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            PlaceholderText="Search saved scans   (Ctrl+F · Ctrl+Enter shows in folder)" QueryIcon="Find" FontSize="12" CornerRadius="4"
+                            TextMemberPath="Name" UpdateTextOnSelect="False"
+                            GotFocus="SearchGotFocus" TextChanged="SearchTextChanged" QuerySubmitted="SearchSubmitted">
+                <AutoSuggestBox.ItemTemplate>
+                    <DataTemplate x:DataType="svc:FileHit">
+                        <StackPanel Padding="0,4" Spacing="2">
+                            <TextBlock Text="{x:Bind Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind Detail}" Style="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </AutoSuggestBox.ItemTemplate>
+            </AutoSuggestBox>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button x:Name="ScanButton" Content="Scan" Style="{StaticResource SecondaryButton}" Click="ScanClick"
+                        ToolTipService.ToolTip="Scan (Ctrl+N or F5)" />
+                <Button x:Name="ExportButton" Content="Export JPEG…" Style="{StaticResource SecondaryButton}" Click="ExportClick"
+                        ToolTipService.ToolTip="Export all pages or only the selected ones as JPEG images (Ctrl+E)" />
+                <Button x:Name="AppendButton" Content="Add to PDF…" Style="{StaticResource SecondaryButton}" Click="AppendClick"
+                        ToolTipService.ToolTip="Add the selected pages to the end of a PDF you saved earlier (Ctrl+Shift+S)" />
+                <Button x:Name="SaveButton" Content="Save as PDF" Style="{StaticResource PrimaryButton}" Click="SaveClick"
+                        ToolTipService.ToolTip="Save selected pages as PDF (Ctrl+S)" />
+            </StackPanel>
+        </Grid>
+
+        <ProgressBar x:Name="Progress" Grid.Row="1" IsIndeterminate="True" Visibility="Collapsed"
+                     Foreground="{StaticResource AccentBrush}" Background="Transparent" Height="2" Padding="0" />
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="320" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Tool rail -->
+            <Border Background="{ThemeResource RailBrush}" BorderBrush="{ThemeResource BorderBrush1}" BorderThickness="0,0,1,0">
+                <Grid Padding="8,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                        <Button x:Name="ImportButton" Style="{StaticResource ToolButton}" Click="ImportClick" ToolTipService.ToolTip="Import images or PDFs (Ctrl+I)">
+                            <FontIcon Glyph="&#xE91B;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="AddBlankButton" Style="{StaticResource ToolButton}" Click="AddBlankClick" ToolTipService.ToolTip="Add a blank page (A1, A2, A3, A4, A5 and other sizes), with an image on it if you like (Ctrl+B)">
+                            <FontIcon Glyph="&#xE710;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" Margin="4,6" />
+                        <Button x:Name="RotateLeftButton" Style="{StaticResource ToolButton}" Click="RotateLeftClick" ToolTipService.ToolTip="Rotate left (Ctrl+Shift+R)">
+                            <FontIcon Glyph="&#xE7AD;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform><ScaleTransform ScaleX="-1" /></FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Button>
+                        <Button x:Name="RotateRightButton" Style="{StaticResource ToolButton}" Click="RotateRightClick" ToolTipService.ToolTip="Rotate right (Ctrl+R)">
+                            <FontIcon Glyph="&#xE7AD;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="CropButton" Style="{StaticResource ToolButton}" Click="CropClick" ToolTipService.ToolTip="Crop page (C)">
+                            <FontIcon Glyph="&#xE7A8;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="SplitButton" Style="{StaticResource ToolButton}" Click="SplitClick" ToolTipService.ToolTip="Split page in two, e.g. a book scanned open (B)">
+                            <FontIcon Glyph="&#xE8A9;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="PlaceImageButton" Style="{StaticResource ToolButton}" Click="PlaceImageClick" ToolTipService.ToolTip="Place an image on this page: size, direction and look (I)">
+                            <FontIcon Glyph="&#xE8B9;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="QuadButton" Style="{StaticResource ToolButton}" Click="QuadClick" ToolTipService.ToolTip="Adjust page corners: drag the four corners onto the page edges (P)">
+                            <FontIcon Glyph="&#xE7C3;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="BrushButton" Style="{StaticResource ToolButton}" Click="BrushClick" ToolTipService.ToolTip="Dodge, burn and erase: paint on the page (D)">
+                            <FontIcon Glyph="&#xE790;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="CompareButton" Style="{StaticResource ToolButton}" ToolTipService.ToolTip="Hold to see the original (or hold \)">
+                            <FontIcon Glyph="&#xE7B3;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="DeleteButton" Style="{StaticResource ToolButton}" Click="DeleteClick" ToolTipService.ToolTip="Delete page (Delete)">
+                            <FontIcon Glyph="&#xE74D;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" Margin="4,6" />
+                        <Button x:Name="SelectAllButton" Style="{StaticResource ToolButton}" Click="SelectAllClick" ToolTipService.ToolTip="Select / deselect all pages (Ctrl+Shift+A)">
+                            <FontIcon Glyph="&#xE8B3;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="ClearButton" Style="{StaticResource ToolButton}" Click="ClearClick" ToolTipService.ToolTip="Clear all scans (Ctrl+Shift+Delete)">
+                            <FontIcon Glyph="&#xE894;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Spacing="4" HorizontalAlignment="Center">
+                        <Button x:Name="FolderButton" Style="{StaticResource ToolButton}" Click="OpenFolderClick" ToolTipService.ToolTip="Open save folder">
+                            <FontIcon Glyph="&#xE838;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="AboutButton" Style="{StaticResource ToolButton}" Click="AboutClick" ToolTipService.ToolTip="About Every Scanner">
+                            <FontIcon Glyph="&#xE946;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                        <Button x:Name="HelpButton" Style="{StaticResource ToolButton}" Click="HelpClick" ToolTipService.ToolTip="Keyboard shortcuts (F1)">
+                            <FontIcon Glyph="&#xE897;" FontSize="16" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Canvas + filmstrip -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="164" />
+                </Grid.RowDefinitions>
+
+                <Grid Background="{ThemeResource CanvasBrush}">
+                    <!-- Zoomable preview: Ctrl+mouse wheel, the +/- buttons, or Ctrl+= / Ctrl+-. 1.0 = fit to window. -->
+                    <ScrollViewer x:Name="PreviewScroll" Visibility="Collapsed" ZoomMode="Enabled" MinZoomFactor="1" MaxZoomFactor="8"
+                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollMode="Auto" VerticalScrollMode="Auto"
+                                  ViewChanged="PreviewViewChanged" SizeChanged="PreviewScrollSizeChanged">
+                        <Grid x:Name="ZoomContent">
+                            <Border x:Name="PreviewFrame" Margin="32,72,32,32" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    BorderBrush="{ThemeResource BorderBrush1}" BorderThickness="1">
+                                <Grid>
+                                    <Image x:Name="PreviewImage" Stretch="Uniform" />
+                                    <local:CropOverlay x:Name="CropArea" Visibility="Collapsed" />
+                                    <Border x:Name="SplitLine" Visibility="Collapsed" IsHitTestVisible="False" Background="#FFFF5A36" />
+                                    <local:QuadOverlay x:Name="QuadArea" Visibility="Collapsed" />
+                                    <local:BrushOverlay x:Name="BrushArea" Visibility="Collapsed" />
+                                    <local:RotateOverlay x:Name="RotateGrips" Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <Border x:Name="ZoomBar" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1" CornerRadius="4" Padding="2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Button x:Name="ZoomOutButton" Style="{StaticResource GhostButton}" Click="ZoomOutClick" Width="32" Padding="0"
+                                    ToolTipService.ToolTip="Zoom out (Ctrl+−, or Ctrl+scroll)">
+                                <FontIcon Glyph="&#xE738;" FontSize="12" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                            </Button>
+                            <Button x:Name="ZoomText" Content="Fit" Style="{StaticResource GhostButton}" Click="ZoomFitClick" MinWidth="52" Padding="6,0"
+                                    ToolTipService.ToolTip="Zoom to fit (0)" />
+                            <Button x:Name="ZoomInButton" Style="{StaticResource GhostButton}" Click="ZoomInClick" Width="32" Padding="0"
+                                    ToolTipService.ToolTip="Zoom in (Ctrl+=, or Ctrl+scroll)">
+                                <FontIcon Glyph="&#xE710;" FontSize="12" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Crop toolbar -->
+                    <Border x:Name="CropBar" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1"
+                            CornerRadius="4" Padding="14,6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock x:Name="CropHint" Text="Click and drag on the page to select the area to keep" VerticalAlignment="Center" Style="{StaticResource MutedText}" />
+                            <Button Content="Whole page" Style="{StaticResource GhostButton}" Click="CropAllClick" ToolTipService.ToolTip="Select the whole page, then drag an edge inwards" />
+                            <Button Content="Clear" Style="{StaticResource GhostButton}" Click="CropResetClick" ToolTipService.ToolTip="Remove the selection and draw a new one" />
+                            <Button Content="Cancel (Esc)" Style="{StaticResource SecondaryButton}" Click="CropCancelClick" />
+                            <Button x:Name="CropApplyButton" Content="Apply crop (Enter)" Style="{StaticResource PrimaryButton}" Click="CropApplyClick" IsEnabled="False"
+                                    ToolTipService.ToolTip="Or double-click inside the selection" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Page corners toolbar -->
+                    <Border x:Name="QuadBar" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1"
+                            CornerRadius="4" Padding="14,6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock x:Name="QuadHint" Text="Drag the four corners onto the corners of the page" VerticalAlignment="Center" Style="{StaticResource MutedText}" />
+                            <Button Content="Find edges" Style="{StaticResource GhostButton}" Click="QuadDetectClick" ToolTipService.ToolTip="Look for the page outline again" />
+                            <Button Content="Whole page" Style="{StaticResource GhostButton}" Click="QuadAllClick" ToolTipService.ToolTip="Put the corners back at the edges of the picture" />
+                            <Button Content="Cancel (Esc)" Style="{StaticResource SecondaryButton}" Click="QuadCancelClick" />
+                            <Button Content="Straighten (Enter)" Style="{StaticResource PrimaryButton}" Click="QuadApplyClick"
+                                    ToolTipService.ToolTip="Stretch the area inside the corners into a flat, upright page" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Shown while the original is held down for comparison -->
+                    <Border x:Name="CompareBadge" Visibility="Collapsed" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1" CornerRadius="4" Padding="10,4">
+                        <TextBlock Text="Original" Style="{StaticResource MutedText}" />
+                    </Border>
+
+                    <!-- Dodge / burn toolbar -->
+                    <Border x:Name="BrushBar" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1"
+                            CornerRadius="4" Padding="14,6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="DodgeButton" Content="Dodge" Style="{StaticResource GhostButton}" Click="DodgeClick"
+                                    ToolTipService.ToolTip="Lighten what you paint over (X switches between dodge and burn)" />
+                            <Button x:Name="BurnButton" Content="Burn" Style="{StaticResource GhostButton}" Click="BurnClick"
+                                    ToolTipService.ToolTip="Darken what you paint over (X switches between dodge and burn)" />
+                            <Button x:Name="EraseButton" Content="Erase" Style="{StaticResource GhostButton}" Click="EraseClick"
+                                    ToolTipService.ToolTip="Paint over stains, pen marks and punch holes with the paper around them" />
+                            <ComboBox x:Name="RangeCombo" SelectedIndex="1" CornerRadius="4" FontSize="12" MinWidth="110" SelectionChanged="BrushSettingChanged"
+                                      ToolTipService.ToolTip="Which tones the brush affects">
+                                <ComboBoxItem Content="Shadows" />
+                                <ComboBoxItem Content="Midtones" />
+                                <ComboBoxItem Content="Highlights" />
+                            </ComboBox>
+                            <TextBlock Text="Size" VerticalAlignment="Center" Style="{StaticResource MutedText}" />
+                            <Slider x:Name="BrushSizeSlider" Minimum="1" Maximum="20" Value="4" StepFrequency="0.5" Width="100" VerticalAlignment="Center"
+                                    ValueChanged="BrushSettingChanged" ToolTipService.ToolTip="Brush size, in % of the page width ( [ and ] change it ). For erasing, make it a bit wider than the mark." />
+                            <TextBlock Text="Exposure" VerticalAlignment="Center" Style="{StaticResource MutedText}" />
+                            <Slider x:Name="BrushExposureSlider" Minimum="1" Maximum="100" Value="30" StepFrequency="1" Width="100" VerticalAlignment="Center"
+                                    ValueChanged="BrushSettingChanged" ToolTipService.ToolTip="How strongly each stroke lightens, darkens or erases" />
+                            <Button x:Name="BrushDoneButton" Content="Done (Esc)" Style="{StaticResource PrimaryButton}" Click="BrushDoneClick" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="380">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="40" Foreground="{ThemeResource BorderBrush2}"
+                                  FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" HorizontalAlignment="Left" />
+                        <TextBlock Text="Scan a whole stack at once" Style="{StaticResource TitleText}" />
+                        <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="{ThemeResource TextMutedBrush}"
+                                   Text="Load the paper in the feeder and press Scan. Pages are straightened and cleaned automatically, then saved as one PDF. You can also import existing images." />
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                            <Button Content="Scan" Style="{StaticResource PrimaryButton}" Click="ScanClick" />
+                            <Button Content="Import images or PDFs" Style="{StaticResource SecondaryButton}" Click="ImportClick" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource MutedText}" Text="Press F1 for keyboard shortcuts" Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <Border x:Name="Toast" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16"
+                            Background="{ThemeResource TileBrush}" BorderBrush="{ThemeResource BorderBrush2}" BorderThickness="1"
+                            CornerRadius="4" Padding="14,8">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock x:Name="ToastText" FontSize="12" VerticalAlignment="Center" />
+                            <Button x:Name="ToastAction" Content="Show in folder" Style="{StaticResource GhostButton}"
+                                    Foreground="{StaticResource AccentBrush}" MinHeight="26" Click="ToastActionClick" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Filmstrip -->
+                <Border Grid.Row="1" Background="{ThemeResource PanelBrush}" BorderBrush="{ThemeResource BorderBrush1}" BorderThickness="0,1,0,0">
+                    <!-- Drag a tile left or right to reorder (reordering needs a selectable list; the bare item template hides the selection). -->
+                    <ListView x:Name="Filmstrip" SelectionMode="Single" IsItemClickEnabled="True" ItemClick="FilmstripItemClick"
+                              CanReorderItems="True" CanDragItems="True" AllowDrop="True" Padding="12,10"
+                              ItemContainerStyle="{StaticResource BareListViewItem}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollMode="Enabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollMode="Disabled">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsStackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:ScanPage">
+                                <Border Width="96" Margin="0,0,10,0" Padding="6" CornerRadius="4" Background="{ThemeResource TileBrush}"
+                                        BorderBrush="{x:Bind CardBorderBrush, Mode=OneWay}" BorderThickness="{x:Bind CardBorderThickness, Mode=OneWay}">
+                                    <Grid RowSpacing="4">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Image Source="{x:Bind Preview, Mode=OneWay}" Stretch="Uniform" Height="100" />
+                                        <Grid Grid.Row="1">
+                                            <TextBlock Text="{x:Bind Label, Mode=OneWay}" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                                            <CheckBox IsChecked="{x:Bind IsSelected, Mode=TwoWay}" HorizontalAlignment="Right"
+                                                      MinWidth="0" Padding="0" Margin="0" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Border>
+            </Grid>
+
+            <!-- Properties panel -->
+            <Border Grid.Column="2" Background="{ThemeResource PanelBrush}" BorderBrush="{ThemeResource BorderBrush1}" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <StackPanel Padding="16,14,16,16" Spacing="10">
+                            <TextBlock Text="ENHANCE" Style="{StaticResource PanelHeader}" />
+                            <Grid ColumnSpacing="8" RowSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Button x:Name="ModeText" Grid.Row="2" Grid.ColumnSpan="2" Content="Text  ·  Persian / English" Tag="Text" Style="{StaticResource TileButton}" Click="ModeClick"
+                                        ToolTipService.ToolTip="Makes printed text darker and sharper on a clean white page, keeping thin strokes and dots. It improves readability; it does not convert the page to editable text." />
+                                <Button x:Name="ModeMagic" Content="Magic Color" Tag="Magic" Style="{StaticResource TileButton}" Click="ModeClick" />
+                                <Button x:Name="ModeOriginal" Grid.Column="1" Content="Original" Tag="Original" Style="{StaticResource TileButton}" Click="ModeClick" />
+                                <Button x:Name="ModeGray" Grid.Row="1" Content="Grayscale" Tag="Gray" Style="{StaticResource TileButton}" Click="ModeClick" />
+                                <Button x:Name="ModeBlackWhite" Grid.Row="1" Grid.Column="1" Content="Black &amp; White" Tag="BlackWhite" Style="{StaticResource TileButton}" Click="ModeClick" />
+                            </Grid>
+                            <Button x:Name="ApplyAllButton" Content="Apply this look to all pages" Style="{StaticResource GhostButton}"
+                                    Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Left" Padding="0" Click="ApplyAllClick" />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" />
+
+                        <StackPanel Padding="16,14,16,16" Spacing="6">
+                            <Grid>
+                                <TextBlock Text="ADJUST" Style="{StaticResource PanelHeader}" VerticalAlignment="Center" />
+                                <Button x:Name="ResetEditsButton" Content="Reset edits" Style="{StaticResource GhostButton}"
+                                        Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Right" MinHeight="24" Padding="0"
+                                        Click="ResetEditsClick" ToolTipService.ToolTip="Undo crop, rotation, brightness, contrast, highlights and shadows on this page" />
+                            </Grid>
+                            <Grid>
+                                <TextBlock Text="Brightness" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="BrightnessValue" Text="0" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" StepFrequency="1" ValueChanged="AdjustChanged" />
+                            <Grid>
+                                <TextBlock Text="Contrast" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="ContrastValue" Text="0" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" StepFrequency="1" ValueChanged="AdjustChanged" />
+                            <Grid>
+                                <TextBlock Text="Highlights" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="HighlightsValue" Text="0" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="HighlightsSlider" Minimum="-100" Maximum="100" Value="0" StepFrequency="1" ValueChanged="AdjustChanged"
+                                    ToolTipService.ToolTip="Light tones. Raise to fade a pale pattern or watermark behind text; lower to bring back washed-out detail." />
+                            <Grid>
+                                <TextBlock Text="Shadows" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="ShadowsValue" Text="0" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="ShadowsSlider" Minimum="-100" Maximum="100" Value="0" StepFrequency="1" ValueChanged="AdjustChanged"
+                                    ToolTipService.ToolTip="Dark tones. Lower to make text blacker; raise to open up dark areas." />
+                            <Grid>
+                                <TextBlock Text="Straighten" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="StraightenValue" Text="0.0°" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="StraightenSlider" Minimum="-15" Maximum="15" Value="0" StepFrequency="0.1" ValueChanged="AdjustChanged"
+                                    ToolTipService.ToolTip="Fine-tune a tilted page, in degrees. Positive turns it counter-clockwise." />
+                            <Grid ColumnSpacing="8" Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="AutoStraightenButton" Content="Auto-straighten" Style="{StaticResource SecondaryButton}" Click="AutoStraightenClick"
+                                        HorizontalAlignment="Stretch" Padding="4,0" ToolTipService.ToolTip="Fix tilt and crooked page edges on this page (S)" />
+                                <Button x:Name="AutoStraightenAllButton" Grid.Column="1" Content="All pages" Style="{StaticResource SecondaryButton}" Click="AutoStraightenAllClick"
+                                        HorizontalAlignment="Stretch" Padding="4,0" ToolTipService.ToolTip="Auto-straighten every page in the batch" />
+                            </Grid>
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" />
+
+                        <StackPanel Padding="16,14,16,16" Spacing="10">
+                            <TextBlock Text="SCAN SETTINGS" Style="{StaticResource PanelHeader}" />
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Scanner" Style="{StaticResource MutedText}" />
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="ScannerCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged" />
+                                    <Button Grid.Column="1" Style="{StaticResource ToolButton}" Width="32" Height="32" Click="RefreshScannersClick"
+                                            ToolTipService.ToolTip="Look for scanners again">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Page size" Style="{StaticResource MutedText}" />
+                                <ComboBox x:Name="PaperCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged">
+                                    <ComboBoxItem Content="Automatic (scanner decides)" />
+                                    <ComboBoxItem Content="A4 (210 × 297 mm)" />
+                                    <ComboBoxItem Content="A5 (148 × 210 mm)" />
+                                    <ComboBoxItem Content="A6 (105 × 148 mm)" />
+                                    <ComboBoxItem Content="B5 (176 × 250 mm)" />
+                                    <ComboBoxItem Content="Letter (8.5 × 11 in)" />
+                                    <ComboBoxItem Content="Legal (8.5 × 14 in)" />
+                                </ComboBox>
+                                <Button x:Name="AdminButton" Content="Some scanners need administrator rights for this. Restart as administrator"
+                                        Style="{StaticResource GhostButton}" Foreground="{StaticResource AccentBrush}" Padding="0" HorizontalAlignment="Left"
+                                        FontSize="11" Click="RestartAsAdminClick" />
+
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Source" Style="{StaticResource MutedText}" />
+                                <ComboBox x:Name="SourceCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged">
+                                    <ComboBoxItem Content="Automatic (feeder if loaded)" />
+                                    <ComboBoxItem Content="Document feeder" />
+                                    <ComboBoxItem Content="Flatbed" />
+                                </ComboBox>
+                            </StackPanel>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Colour" Style="{StaticResource MutedText}" />
+                                    <ComboBox x:Name="ColorCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged">
+                                        <ComboBoxItem Content="Colour" />
+                                        <ComboBoxItem Content="Grayscale" />
+                                        <ComboBoxItem Content="Black &amp; white" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="Resolution" Style="{StaticResource MutedText}" />
+                                    <ComboBox x:Name="DpiCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged">
+                                        <ComboBoxItem Content="150 dpi" />
+                                        <ComboBoxItem Content="200 dpi" />
+                                        <ComboBoxItem Content="300 dpi" />
+                                        <ComboBoxItem Content="600 dpi" />
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+                            <CheckBox x:Name="TwainCheck" Content="Use the scanner's fast driver (TWAIN) if it has one" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="Scans a whole stack in one pass instead of restarting the feeder for every sheet. Turn off to use the Windows (WIA) driver only." />
+                            <CheckBox x:Name="SkipBlankCheck" Content="Skip blank pages" FontSize="12" Click="SettingChanged" />
+                            <CheckBox x:Name="AutoStraightenCheck" Content="Always straighten pages automatically" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="Every new scan or import is checked for tilt and crooked edges and fixed. You can still adjust each page afterwards." />
+                            <CheckBox x:Name="SmartCheck" Content="Smart mode (auto-adjust every page for readability)" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="After each scan or import, every page is checked and given the grayscale look, highlights, shadows and brightness that make its text easiest to read. You can still adjust each page afterwards." />
+                            <CheckBox x:Name="FastCheck" Content="Fast scan (lower resolution, no straightening)" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="Scans at up to 200 dpi and keeps each page as delivered. Ctrl+Shift+N does one fast scan." />
+                            <CheckBox x:Name="DuplexCheck" Content="Double-sided (front and back)" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="Uses the scanner's duplex feeder if it has one; otherwise asks you to flip the stack." />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" />
+
+                        <StackPanel Padding="16,14,16,16" Spacing="8">
+                            <TextBlock Text="OUTPUT" Style="{StaticResource PanelHeader}" />
+                            <TextBlock Text="Format" Style="{StaticResource MutedText}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="FormatPdf" Content="PDF" Tag="Pdf" Style="{StaticResource TileButton}" Click="FormatClick" Padding="4,0" />
+                                <Button x:Name="FormatJpeg" Grid.Column="1" Content="JPEG" Tag="Jpeg" Style="{StaticResource TileButton}" Click="FormatClick" Padding="4,0" />
+                                <Button x:Name="FormatPng" Grid.Column="2" Content="PNG" Tag="Png" Style="{StaticResource TileButton}" Click="FormatClick" Padding="4,0" />
+                            </Grid>
+                            <Grid Margin="0,4,0,0">
+                                <TextBlock Text="Quality" Style="{StaticResource MutedText}" />
+                                <TextBlock x:Name="QualityValue" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <Slider x:Name="QualitySlider" Minimum="30" Maximum="100" Value="85" StepFrequency="1" ValueChanged="QualityChanged"
+                                    ToolTipService.ToolTip="Lower = smaller files, higher = sharper. Applies to JPEG and to colour/grey pages in PDFs." />
+                            <CheckBox x:Name="OcrCheck" Content="Make PDFs searchable (reads the text, Persian and English)" FontSize="12" Click="SettingChanged"
+                                      ToolTipService.ToolTip="Adds an invisible text layer so you can search and copy text in the PDF. Uses the OCR built into Windows." />
+                            <TextBlock Text="Save to" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                            <TextBlock x:Name="FolderText" TextTrimming="CharacterEllipsis" FontSize="12" />
+                            <Button Content="Change folder…" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="ChangeFolderClick" />
+                            <CheckBox x:Name="DailyCheck" Content="Create a folder for each day" FontSize="12" Click="SettingChanged" Margin="0,4,0,0" />
+                            <ComboBox x:Name="DateStyleCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="SettingChanged">
+                                <ComboBoxItem Content="Shamsi date (e.g. 1405-08-05)" />
+                                <ComboBoxItem Content="Gregorian date (e.g. 2026-10-27)" />
+                            </ComboBox>
+                            <TextBlock x:Name="DailyPreview" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" />
+
+                        <StackPanel Padding="16,14,16,16" Spacing="8">
+                            <TextBlock Text="WORKSPACE" Style="{StaticResource PanelHeader}" />
+                            <ComboBox x:Name="WorkspaceCombo" HorizontalAlignment="Stretch" CornerRadius="4" FontSize="12" SelectionChanged="WorkspaceSelected" />
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Content="Save" Style="{StaticResource SecondaryButton}" Click="WorkspaceSaveClick" HorizontalAlignment="Stretch" Padding="4,0"
+                                        ToolTipService.ToolTip="Store the current settings in this workspace" />
+                                <Button Grid.Column="1" Content="New…" Style="{StaticResource SecondaryButton}" Click="WorkspaceNewClick" HorizontalAlignment="Stretch" Padding="4,0" />
+                                <Button Grid.Column="2" Content="Delete" Style="{StaticResource SecondaryButton}" Click="WorkspaceDeleteClick" HorizontalAlignment="Stretch" Padding="4,0" />
+                            </Grid>
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Content="Export…" Style="{StaticResource GhostButton}" Click="WorkspaceExportClick" HorizontalAlignment="Stretch"
+                                        Foreground="{StaticResource AccentBrush}" />
+                                <Button Grid.Column="1" Content="Import…" Style="{StaticResource GhostButton}" Click="WorkspaceImportClick" HorizontalAlignment="Stretch"
+                                        Foreground="{StaticResource AccentBrush}" />
+                            </Grid>
+                            <TextBlock Text="A workspace stores your scan and output defaults. Export it to share or back it up." Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Border Height="1" Background="{ThemeResource BorderBrush1}" />
+
+                        <StackPanel Padding="16,14,16,20" Spacing="10">
+                            <TextBlock Text="APPEARANCE" Style="{StaticResource PanelHeader}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="ThemeSystem" Content="System" Tag="System" Style="{StaticResource TileButton}" Click="ThemeClick" Padding="4,0" />
+                                <Button x:Name="ThemeLight" Grid.Column="1" Content="Light" Tag="Light" Style="{StaticResource TileButton}" Click="ThemeClick" Padding="4,0" />
+                                <Button x:Name="ThemeDark" Grid.Column="2" Content="Dark" Tag="Dark" Style="{StaticResource TileButton}" Click="ThemeClick" Padding="4,0" />
+                            </Grid>
+                            <TextBlock Text="Ctrl+T cycles the theme" Style="{StaticResource MutedText}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="3" Background="{ThemeResource ChromeBrush}" BorderBrush="{ThemeResource BorderBrush1}" BorderThickness="0,1,0,0" Padding="16,0">
+            <Grid>
+                <StackPanel Orientation="Horizontal" Spacing="20" VerticalAlignment="Center">
+                    <TextBlock x:Name="PagesStatus" Style="{StaticResource MutedText}" />
+                    <TextBlock x:Name="SelectedStatus" Style="{StaticResource MutedText}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button x:Name="CancelScanButton" Content="Cancel scan" Visibility="Collapsed" Style="{StaticResource SecondaryButton}"
+                            Padding="10,2" MinHeight="0" FontSize="12" Click="CancelScanClick" ToolTipService.ToolTip="Stop scanning (Esc)" />
+                    <TextBlock x:Name="BusyStatus" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
